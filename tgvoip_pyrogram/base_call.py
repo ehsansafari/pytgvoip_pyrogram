@@ -137,7 +137,7 @@ class VoIPCallBase:
 
     async def get_dhc(self):
         self.dhc = DH(
-            await self.client.send(
+            await self.client.invoke(
                 functions.messages.GetDhConfig(version=0, random_length=256)
             )
         )
@@ -210,7 +210,7 @@ class VoIPCallBase:
         if not reason:
             reason = types.PhoneCallDiscardReasonDisconnect()
         try:
-            await self.client.send(
+            await self.client.invoke(
                 functions.phone.DiscardCall(
                     peer=types.InputPhoneCall(
                         id=self.call_id, access_hash=self.call_access_hash
