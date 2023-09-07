@@ -44,7 +44,9 @@ class VoIPIncomingCall(VoIPCallBase):
             raise pyrogram.StopPropagation
         raise pyrogram.ContinuePropagation
 
-    def on_call_accepted(self, func: callable) -> callable:  # telegram acknowledged that you've accepted the call
+    def on_call_accepted(
+        self, func: callable
+    ) -> callable:  # telegram acknowledged that you've accepted the call
         self.call_accepted_handlers.append(func)
         return func
 
@@ -52,41 +54,49 @@ class VoIPIncomingCall(VoIPCallBase):
         self.update_state(CallState.EXCHANGING_KEYS)
         if not self.call:
             self.call_failed()
-            raise RuntimeError('call is not set')
+            raise RuntimeError("call is not set")
         await self.get_dhc()
-        self.b = randint(2, self.dhc.p-1)
+        self.b = randint(2, self.dhc.p - 1)
         self.g_b = pow(self.dhc.g, self.b, self.dhc.p)
         self.g_a_hash = self.call.g_a_hash
         try:
-            self.call = (await self.client.send(functions.phone.AcceptCall(
-                peer=types.InputPhoneCall(id=self.call_id, access_hash=self.call_access_hash),
-                g_b=i2b(self.g_b),
-                protocol=self.get_protocol()
-            ))).phone_call
+            self.call = (
+                await self.client.invoke(
+                    functions.phone.AcceptCall(
+                        peer=types.InputPhoneCall(
+                            id=self.call_id, access_hash=self.call_access_hash
+                        ),
+                        g_b=i2b(self.g_b),
+                        protocol=self.get_protocol(),
+                    )
+                )
+            ).phone_call
         except errors.Error as e:
-            if e.ID == 'CALL_ALREADY_ACCEPTED':
+            if e.ID == "CALL_ALREADY_ACCEPTED":
                 self.stop()
                 return True
-            elif e.ID == 'CALL_ALREADY_DECLINED':
+            elif e.ID == "CALL_ALREADY_DECLINED":
                 self.call_discarded()
                 return False
             raise e
         if isinstance(self.call, types.PhoneCallDiscarded):
-            print('Call is already discarded')
+            print("Call is already discarded")
             self.call_discarded()
             return False
         return True
 
     async def call_accepted(self) -> None:
         for handler in self.call_accepted_handlers:
-            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(handler(self), loop=self.client.loop)
+            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(
+                handler(self), loop=self.client.loop
+            )
 
         if not self.call.g_a_or_b:
-            print('g_a is null')
+            print("g_a is null")
             self.call_failed()
             return
         if self.g_a_hash != hashlib.sha256(self.call.g_a_or_b).digest():
-            print('g_a_hash doesn\'t match')
+            print("g_a_hash doesn't match")
             self.call_failed()
             return
         self.g_a = b2i(self.call.g_a_or_b)
@@ -94,7 +104,7 @@ class VoIPIncomingCall(VoIPCallBase):
         self.auth_key = pow(self.g_a, self.b, self.dhc.p)
         self.key_fingerprint = calc_fingerprint(self.auth_key_bytes)
         if self.key_fingerprint != self.call.key_fingerprint:
-            print('fingerprints don\'t match')
+            print("fingerprints don't match")
             self.call_failed()
             return
         await self._initiate_encrypted_call()
