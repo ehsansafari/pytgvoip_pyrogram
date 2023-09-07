@@ -22,7 +22,14 @@ from pyrogram import errors
 from pyrogram.raw import functions, types
 from pyrogram.handlers import RawUpdateHandler
 
-from tgvoip import VoIPController, CallState, CallError, Endpoint, DataSaving, VoIPServerConfig
+from tgvoip import (
+    VoIPController,
+    CallState,
+    CallError,
+    Endpoint,
+    DataSaving,
+    VoIPServerConfig,
+)
 from tgvoip.utils import i2b, b2i, check_g
 
 
@@ -40,7 +47,7 @@ class VoIPCallBase:
 
     def __init__(self, client: pyrogram.Client, use_proxy_if_available: bool = True):
         if not client.is_connected:
-            raise RuntimeError('Client must be started first')
+            raise RuntimeError("Client must be started first")
         self.client = client
         self.ctrl = VoIPController()
         self.ctrl_started = False
@@ -63,7 +70,9 @@ class VoIPCallBase:
 
         if use_proxy_if_available and client.proxy:
             proxy = self.client.proxy
-            self.ctrl.set_proxy(proxy['hostname'], proxy['port'], proxy['username'], proxy['password'])
+            self.ctrl.set_proxy(
+                proxy["hostname"], proxy["port"], proxy["username"], proxy["password"]
+            )
 
         self._update_handler = RawUpdateHandler(self.process_update)
         self.client.add_handler(self._update_handler, -1)
@@ -76,45 +85,62 @@ class VoIPCallBase:
         if not self.call or not call or call.id != self.call.id:
             raise pyrogram.ContinuePropagation
         self.call = call
-        if hasattr(call, 'access_hash') and call.access_hash:
+        if hasattr(call, "access_hash") and call.access_hash:
             self.call_access_hash = call.access_hash
 
         if isinstance(call, types.PhoneCallDiscarded):
             self.call_discarded()
             raise pyrogram.StopPropagation
 
-    def on_call_started(self, func: callable) -> callable:  # well, the conversation has started
+    def on_call_started(
+        self, func: callable
+    ) -> callable:  # well, the conversation has started
         self.call_started_handlers.append(func)
         return func
 
-    def on_call_discarded(self, func: callable) -> callable:  # call was discarded, not necessarily started before
+    def on_call_discarded(
+        self, func: callable
+    ) -> callable:  # call was discarded, not necessarily started before
         self.call_discarded_handlers.append(func)
         return func
 
-    def on_call_ended(self, func: callable) -> callable:  # call was discarded with non-busy reason
-                                                          # (was started and then discarded?)
+    def on_call_ended(
+        self, func: callable
+    ) -> callable:  # call was discarded with non-busy reason
+        # (was started and then discarded?)
         self.call_ended_handlers.append(func)
         return func
 
     def on_call_state_changed(self, func: callable) -> callable:
         if callable(func):
-            self.ctrl.call_state_changed_handlers.append(lambda state: func(self, state))
+            self.ctrl.call_state_changed_handlers.append(
+                lambda state: func(self, state)
+            )
         return func
 
     @property
     def auth_key_bytes(self) -> bytes:
-        return i2b(self.auth_key) if self.auth_key is not None else b''
+        return i2b(self.auth_key) if self.auth_key is not None else b""
 
     @property
     def call_id(self) -> int:
         return self.call.id if self.call else 0
 
     def get_protocol(self) -> types.PhoneCallProtocol:
-        return types.PhoneCallProtocol(min_layer=self.min_layer, max_layer=self.max_layer, udp_p2p=True,
-                                       udp_reflector=True, library_versions=["2.4.4", "2.7"])
+        return types.PhoneCallProtocol(
+            min_layer=self.min_layer,
+            max_layer=self.max_layer,
+            udp_p2p=True,
+            udp_reflector=True,
+            library_versions=["2.4.4", "2.7"],
+        )
 
     async def get_dhc(self):
-        self.dhc = DH(await self.client.send(functions.messages.GetDhConfig(version=0, random_length=256)))
+        self.dhc = DH(
+            await self.client.send(
+                functions.messages.GetDhConfig(version=0, random_length=256)
+            )
+        )
 
     def check_g(self, g_x: int, p: int) -> None:
         try:
@@ -129,13 +155,16 @@ class VoIPCallBase:
                 self.client.remove_handler(self._update_handler, -1)
             except ValueError:
                 pass
+
         asyncio.ensure_future(_())
 
         del self.ctrl
         self.ctrl = None
 
         for handler in self.call_ended_handlers:
-            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(handler(self), loop=self.client.loop)
+            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(
+                handler(self), loop=self.client.loop
+            )
 
     def update_state(self, val: CallState) -> None:
         self.state = val
@@ -147,14 +176,22 @@ class VoIPCallBase:
 
     def call_failed(self, error: CallError = None) -> None:
         if error is None:
-            error = self.ctrl.get_last_error() if self.ctrl and self.ctrl_started else CallError.UNKNOWN
-        print('Call', self.call_id, 'failed with error', error)
+            error = (
+                self.ctrl.get_last_error()
+                if self.ctrl and self.ctrl_started
+                else CallError.UNKNOWN
+            )
+        print("Call", self.call_id, "failed with error", error)
         self.update_state(CallState.FAILED)
         self.stop()
 
     def call_discarded(self):
         # TODO: call.need_debug
-        need_rate = self.ctrl and VoIPServerConfig.config.get('bad_call_rating') and self.ctrl.need_rate()
+        need_rate = (
+            self.ctrl
+            and VoIPServerConfig.config.get("bad_call_rating")
+            and self.ctrl.need_rate()
+        )
         if isinstance(self.call.reason, types.PhoneCallDiscardReasonBusy):
             self.update_state(CallState.BUSY)
             self.stop()
@@ -164,34 +201,53 @@ class VoIPCallBase:
             pass  # TODO: rate
 
         for handler in self.call_discarded_handlers:
-            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(handler(self), loop=self.client.loop)
+            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(
+                handler(self), loop=self.client.loop
+            )
 
     async def discard_call(self, reason=None):
         # TODO: rating
         if not reason:
             reason = types.PhoneCallDiscardReasonDisconnect()
         try:
-            await self.client.send(functions.phone.DiscardCall(
-                peer=types.InputPhoneCall(id=self.call_id, access_hash=self.call_access_hash),
-                duration=self.ctrl.call_duration,
-                connection_id=self.ctrl.get_preferred_relay_id(),
-                reason=reason
-            ))
+            await self.client.send(
+                functions.phone.DiscardCall(
+                    peer=types.InputPhoneCall(
+                        id=self.call_id, access_hash=self.call_access_hash
+                    ),
+                    duration=self.ctrl.call_duration,
+                    connection_id=self.ctrl.get_preferred_relay_id(),
+                    reason=reason,
+                )
+            )
         except (errors.CallAlreadyDeclined, errors.CallAlreadyAccepted):
             pass
         self.call_ended()
 
     async def _initiate_encrypted_call(self) -> None:
-        config = await self.client.send(functions.help.GetConfig())  # type: types.Config
-        self.ctrl.set_config(config.call_packet_timeout_ms / 1000., config.call_connect_timeout_ms / 1000.,
-                             DataSaving.NEVER, self.call.id)
+        config = await self.client.invoke(
+            functions.help.GetConfig()
+        )  # type: types.Config
+        self.ctrl.set_config(
+            config.call_packet_timeout_ms / 1000.0,
+            config.call_connect_timeout_ms / 1000.0,
+            DataSaving.NEVER,
+            self.call.id,
+        )
         self.ctrl.set_encryption_key(self.auth_key_bytes, self.is_outgoing)
-        endpoints = [Endpoint(e.id, e.ip, e.ipv6, e.port, e.peer_tag) for e in self.call.connections]
-        self.ctrl.set_remote_endpoints(endpoints, self.call.p2p_allowed, False, self.call.protocol.max_layer)
+        endpoints = [
+            Endpoint(e.id, e.ip, e.ipv6, e.port, e.peer_tag)
+            for e in self.call.connections
+        ]
+        self.ctrl.set_remote_endpoints(
+            endpoints, self.call.p2p_allowed, False, self.call.protocol.max_layer
+        )
         self.ctrl.start()
         self.ctrl.connect()
         self.ctrl_started = True
         self.update_state(CallState.ESTABLISHED)
 
         for handler in self.call_started_handlers:
-            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(handler(self), loop=self.client.loop)
+            asyncio.iscoroutinefunction(handler) and asyncio.ensure_future(
+                handler(self), loop=self.client.loop
+            )
