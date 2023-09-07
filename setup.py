@@ -26,7 +26,7 @@ from setuptools import setup
 
 def get_version():
     with open("tgvoip_pyrogram/__init__.py", encoding="utf-8") as f:
-        version = re.findall(r"__version__ = '(.+)'", f.read())[0]
+        version = re.findall(r'__version__ = "(.+)"', f.read())[0]
         if os.environ.get("BUILD") is None:
             version += "+develop"
         return version
